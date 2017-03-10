@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -26,7 +27,9 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.provisioning.JdbcUserDetailsManager;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
@@ -60,15 +63,22 @@ public class SecurityConfig {
 	@Autowired
 	DataSource dataSource;
 
-	@Bean
+	@Bean(name = "passwordEncoder")
 	BCryptPasswordEncoder bCryptPasswordEncoderBean() {
 		return new BCryptPasswordEncoder();
+	}
+	
+	@Bean(name = "userDetailsService")
+	UserDetailsService userDetailsService() {
+		JdbcUserDetailsManager jdbcUserDetailsManager = new JdbcUserDetailsManager();
+		jdbcUserDetailsManager.setDataSource(dataSource);
+		return jdbcUserDetailsManager;
 	}
 
 	@Autowired
 	public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception {
-
-		auth.jdbcAuthentication().dataSource(dataSource).passwordEncoder(bCryptPasswordEncoderBean());
+        auth.userDetailsService(userDetailsService()).passwordEncoder(bCryptPasswordEncoderBean());
+//		auth.jdbcAuthentication().dataSource(dataSource).passwordEncoder(bCryptPasswordEncoderBean());
 	}
 
 	@Configuration
@@ -100,6 +110,12 @@ public class SecurityConfig {
 		@Bean
 		public LogoutSuccessHandler logoutSuccessHandler() {
 			return new AjaxSimpleUrlLogoutSuccessHandler("/admin/login?logout");
+		}
+		
+		@Override
+		@Bean(name = "authenticationManager")
+		public AuthenticationManager authenticationManagerBean() throws Exception {
+			return super.authenticationManagerBean();
 		}
 
 		@Override

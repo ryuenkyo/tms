@@ -27,11 +27,11 @@ import org.springframework.security.oauth2.config.annotation.web.configuration.R
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.web.filter.CompositeFilter;
 
-@Configuration
+//@Configuration
 public class OAuth2ServerConfig {
 
-	@Configuration
-	@EnableResourceServer
+//	@Configuration
+//	@EnableResourceServer
 	protected static class ResourceServerConfiguration extends ResourceServerConfigurerAdapter {
 
 		@Override
@@ -42,9 +42,9 @@ public class OAuth2ServerConfig {
 		}
 	}
 
-	@Configuration
-	@EnableOAuth2Client
-	@EnableAuthorizationServer
+//	@Configuration
+//	@EnableOAuth2Client
+//	@EnableAuthorizationServer
 	protected static class AuthorizationServerConfiguration extends WebSecurityConfigurerAdapter {
 		
 		@Autowired
