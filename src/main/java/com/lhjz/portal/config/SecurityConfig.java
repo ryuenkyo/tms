@@ -147,7 +147,7 @@ public class SecurityConfig {
 				.and()
 					.exceptionHandling()
 					.authenticationEntryPoint(authenticationEntryPoint())
-				.and().httpBasic()
+//				.and().httpBasic()
 				.and()
 					.formLogin()
 					.loginPage("/admin/login")
