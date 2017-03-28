@@ -3,12 +3,14 @@
  */
 package com.lhjz.portal.controller;
 
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import javax.mail.MessagingException;
+import javax.servlet.http.HttpServletResponse;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -30,9 +33,11 @@ import com.lhjz.portal.entity.security.User;
 import com.lhjz.portal.model.RespBody;
 import com.lhjz.portal.pojo.Enum.Role;
 import com.lhjz.portal.pojo.Enum.Status;
+import com.lhjz.portal.pojo.WXForm;
 import com.lhjz.portal.repository.AuthorityRepository;
 import com.lhjz.portal.repository.UserRepository;
 import com.lhjz.portal.util.DateUtil;
+import com.lhjz.portal.util.EncoderUtil;
 import com.lhjz.portal.util.StringUtil;
 
 /**
@@ -62,6 +67,9 @@ public class FreeController extends BaseController {
 
 	@Autowired
 	PasswordEncoder passwordEncoder;
+	
+	@Value("${tms.wx.token}")
+	String wxToken;
 
 	@Autowired
 	Environment env;
@@ -254,5 +262,59 @@ public class FreeController extends BaseController {
 
 		return RespBody.succeed();
 
+	}
+
+	@RequestMapping(value = "wx/app", method = { RequestMethod.GET })
+	public Object wxAppCheck(@ModelAttribute WXForm wxForm) {
+
+		if (wxVerify(wxForm)) {
+			if (StringUtil.isNotEmpty(wxForm.getEchostr())) {
+				return wxForm.getEchostr();
+			} else {
+				return RespBody.succeed();
+			}
+		}
+
+		return RespBody.failed();
+	}
+	
+	@RequestMapping(value = "wx/app", method = { RequestMethod.POST })
+	public RespBody wxAppHandle(@RequestBody String body) {
+		
+		return RespBody.succeed(body);
+		
+	}
+	
+	/**
+	 * 微信验证.
+	 * 
+	 * @author xiweicheng
+	 * @creation 2014年3月20日 下午12:59:04
+	 * @modification 2014年3月20日 下午12:59:04
+	 * @param weiXinMsg
+	 * @param locale
+	 */
+	private boolean wxVerify(WXForm wxForm) {
+
+		logger.debug("验证【微信】");
+
+		try {
+
+			if (wxForm != null) {
+				String[] arr = new String[] { wxToken, wxForm.getTimestamp(), wxForm.getNonce() };
+				Arrays.sort(arr);
+				String join = StringUtil.join(SysConstant.EMPTY, arr);
+				String encode = EncoderUtil.encodeBySHA1(join);
+
+				if (encode.equals(wxForm.getSignature())) {
+					return true;
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			logger.error(e.getMessage(), e);
+		}
+
+		return false;
 	}
 }
