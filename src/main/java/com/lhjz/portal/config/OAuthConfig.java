@@ -5,6 +5,7 @@ import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.oauth2.config.annotation.configurers.ClientDetailsServiceConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configuration.AuthorizationServerConfigurerAdapter;
@@ -24,8 +25,6 @@ public class OAuthConfig {
 	@EnableResourceServer
 	protected static class ResourceServer extends ResourceServerConfigurerAdapter {
 
-		// Identifies this resource server. Usefull if the AuthorisationServer
-		// authorises multiple Resource servers
 		private static final String RESOURCE_ID = "tms";
 
 		@Autowired
@@ -34,7 +33,7 @@ public class OAuthConfig {
 		@Override
 		public void configure(HttpSecurity http) throws Exception {
 			// @formatter:off
-	        http.authorizeRequests().anyRequest().authenticated();
+	        http.authorizeRequests().antMatchers("/wx/**").authenticated();
 	        // @formatter:on
 		}
 
@@ -57,8 +56,8 @@ public class OAuthConfig {
 		@Autowired
 		DataSource dataSource;
 
-//		@Autowired
-//		AuthenticationManager authenticationManager;
+		@Autowired
+		AuthenticationManager authenticationManager;
 
 		@Bean
 		public TokenStore tokenStore() {
@@ -67,30 +66,31 @@ public class OAuthConfig {
 
 		@Override
 		public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
-//			endpoints.authenticationManager(authenticationManager);
+			endpoints.authenticationManager(authenticationManager);
 			endpoints.tokenStore(tokenStore());
 
-//			// 配置TokenServices参数
-//			DefaultTokenServices tokenServices = new DefaultTokenServices();
-//			tokenServices.setTokenStore(endpoints.getTokenStore());
-//			tokenServices.setSupportRefreshToken(false);
-//			tokenServices.setClientDetailsService(endpoints.getClientDetailsService());
-//			tokenServices.setTokenEnhancer(endpoints.getTokenEnhancer());
-//			tokenServices.setAccessTokenValiditySeconds((int) TimeUnit.DAYS.toSeconds(30)); // 30天
-//			endpoints.tokenServices(tokenServices);
+			// // 配置TokenServices参数
+			// DefaultTokenServices tokenServices = new DefaultTokenServices();
+			// tokenServices.setTokenStore(endpoints.getTokenStore());
+			// tokenServices.setSupportRefreshToken(false);
+			// tokenServices.setClientDetailsService(endpoints.getClientDetailsService());
+			// tokenServices.setTokenEnhancer(endpoints.getTokenEnhancer());
+			// tokenServices.setAccessTokenValiditySeconds((int)
+			// TimeUnit.DAYS.toSeconds(30)); // 30天
+			// endpoints.tokenServices(tokenServices);
 		}
 
-//		@Bean
-//		public ClientDetailsService clientDetails() {
-//			return new JdbcClientDetailsService(dataSource);
-//		}
+		// @Bean
+		// public ClientDetailsService clientDetails() {
+		// return new JdbcClientDetailsService(dataSource);
+		// }
 
 		@Override
 		public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
 			clients.jdbc(dataSource);
-//			clients.withClientDetails(clientDetails());
-//			clients.inMemory().withClient("tms").secret("tms").authorizedGrantTypes("authorization_code")
-//					.scopes("app");
+			// clients.withClientDetails(clientDetails());
+			// clients.inMemory().withClient("tms").secret("tms").authorizedGrantTypes("authorization_code")
+			// .scopes("app");
 
 		}
 

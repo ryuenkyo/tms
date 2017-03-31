@@ -7,12 +7,14 @@ import javax.sql.DataSource;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
-import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.builders.WebSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
@@ -32,9 +34,9 @@ import com.lhjz.portal.component.LoginSuccessHandler;
  * @date 2015年3月30日 下午9:42:00
  * 
  */
-//@Configuration
-//@EnableWebSecurity
-//@EnableGlobalMethodSecurity(securedEnabled = true)
+@Configuration
+@EnableWebSecurity
+@EnableGlobalMethodSecurity(securedEnabled = true)
 public class SecurityConfig {
 
 	static final int order = -10;
@@ -51,8 +53,8 @@ public class SecurityConfig {
 		auth.jdbcAuthentication().dataSource(dataSource).passwordEncoder(passwordEncoder);
 	}
 
-//	@Configuration
-	@Order(order)
+	@Configuration
+//	@Order(order)
 	@Profile({ "dev", "prod" })
 	public static class SecurityConfiguration extends WebSecurityConfigurerAdapter {
 
@@ -108,52 +110,34 @@ public class SecurityConfig {
 
 		@Override
 		protected void configure(HttpSecurity http) throws Exception {
-			
-//			super.configure(http);
 
 			// @formatter:off
-//			http
-//				.authorizeRequests()
-//				.antMatchers("/admin/**", "/api/**")
-//					.authenticated()
-//				.and()
-//					.exceptionHandling()
-//					.authenticationEntryPoint(authenticationEntryPoint())
-////				.and().httpBasic()
-//				.and()
-//					.formLogin()
-//					.loginPage("/admin/login")
-//					.permitAll()
-//					.loginProcessingUrl("/admin/signin")
-//					.successHandler(loginSuccessHandler)
-//					.failureHandler(ajaxSimpleUrlAuthenticationFailureHandler)
-//				.and()
-//					.logout()
-//					.logoutUrl("/admin/logout")
-//					.permitAll()
-//					.logoutSuccessHandler(logoutSuccessHandler())
-//				.and()
-//					.rememberMe()
-//					.tokenRepository(persistentTokenRepository())
-//					.tokenValiditySeconds(1209600)
-//				.and()
-//					.csrf()
-//					.disable();
+			http.csrf().disable()
+				.authorizeRequests()
+				.antMatchers("/admin/**", "/api/**")
+					.authenticated()
+				.and()
+					.exceptionHandling()
+					.authenticationEntryPoint(authenticationEntryPoint())
+//				.and().httpBasic()
+				.and()
+					.formLogin()
+					.loginPage("/admin/login")
+					.permitAll()
+					.loginProcessingUrl("/admin/signin")
+					.successHandler(loginSuccessHandler)
+					.failureHandler(ajaxSimpleUrlAuthenticationFailureHandler)
+				.and()
+					.logout()
+					.logoutUrl("/admin/logout")
+					.permitAll()
+					.logoutSuccessHandler(logoutSuccessHandler())
+				.and()
+					.rememberMe()
+					.tokenRepository(persistentTokenRepository())
+					.tokenValiditySeconds(1209600)
+				.and().authorizeRequests().antMatchers("/", "/free/**").permitAll();
 			// @formatter:on
-		}
-
-	}
-
-//	@Configuration
-	@Order(order + 1)
-	@Profile({ "dev", "prod" })
-	public static class SecurityConfiguration2 extends WebSecurityConfigurerAdapter {
-
-		@Override
-		protected void configure(HttpSecurity http) throws Exception {
-
-			http.antMatcher("/").authorizeRequests().anyRequest().permitAll().and().csrf().disable();
-			http.antMatcher("/free/**").authorizeRequests().anyRequest().permitAll().and().csrf().disable();
 
 		}
 
