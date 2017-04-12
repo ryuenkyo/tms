@@ -18,26 +18,39 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.jayway.jsonpath.JsonPath;
 import com.lhjz.portal.base.BaseController;
 import com.lhjz.portal.component.MailSender2;
 import com.lhjz.portal.constant.SysConstant;
+import com.lhjz.portal.entity.Channel;
+import com.lhjz.portal.entity.ChatChannel;
 import com.lhjz.portal.entity.security.Authority;
 import com.lhjz.portal.entity.security.AuthorityId;
 import com.lhjz.portal.entity.security.User;
+import com.lhjz.portal.model.Mail;
 import com.lhjz.portal.model.RespBody;
+import com.lhjz.portal.model.RunAsAuth;
 import com.lhjz.portal.pojo.Enum.Role;
 import com.lhjz.portal.pojo.Enum.Status;
 import com.lhjz.portal.pojo.WXForm;
 import com.lhjz.portal.repository.AuthorityRepository;
+import com.lhjz.portal.repository.ChannelRepository;
+import com.lhjz.portal.repository.ChatChannelRepository;
 import com.lhjz.portal.repository.UserRepository;
 import com.lhjz.portal.util.DateUtil;
 import com.lhjz.portal.util.EncoderUtil;
+import com.lhjz.portal.util.MapUtil;
 import com.lhjz.portal.util.StringUtil;
+import com.lhjz.portal.util.TemplateUtil;
+import com.lhjz.portal.util.ThreadUtil;
 
 /**
  * 
@@ -71,7 +84,19 @@ public class FreeController extends BaseController {
 	String wxToken;
 
 	@Autowired
+	ChannelRepository channelRepository;
+	
+	@Autowired
+	ChatChannelRepository chatChannelRepository;
+	
+	@Autowired
 	Environment env;
+	
+	@Value("${tms.base.url}")
+	private String baseUrl;
+	
+	@Value("${tms.token.jira}")
+	private String tokenJira;
 
 	@RequestMapping(value = "user/pwd/reset", method = { RequestMethod.POST })
 	public RespBody resetUserPwd(@RequestBody Map<String, Object> params) {
@@ -315,5 +340,114 @@ public class FreeController extends BaseController {
 		}
 
 		return false;
+	}
+	
+	@RequestMapping(value = "channel/send/{token}", method = RequestMethod.POST)
+	@ResponseBody
+	public RespBody sendChannelMsg(@RequestParam("channel") String channel, @RequestParam("user") String user,
+			@PathVariable("token") String token,
+			@RequestParam(value = "mail", required = false, defaultValue = "false") Boolean mail,
+			@RequestBody String reqBody) {
+
+		if (!tokenJira.equals(token)) {
+			return RespBody.failed("Token认证失败!");
+		}
+
+		Channel channel2 = channelRepository.findOneByName(channel);
+		if (channel2 == null) {
+			return RespBody.failed("发送消息目的频道不存在!");
+		}
+
+		User user2 = userRepository.findOne(user);
+		if (user2 == null) {
+			return RespBody.failed("用户不存在不存在!");
+		}
+
+		String webhookEvent = JsonPath.read(reqBody, "$.webhookEvent");
+
+		if (!"jira:issue_created".equals(webhookEvent)) {
+			return RespBody.failed("不支持处理类型!");
+		}
+
+		String issueSelf = JsonPath.read(reqBody, "$.issue.self");
+		String issueKey = JsonPath.read(reqBody, "$.issue.key");
+		String description = JsonPath.read(reqBody, "$.issue.fields.description");
+		String summary = JsonPath.read(reqBody, "$.issue.fields.summary");
+		String creatorSelf = JsonPath.read(reqBody, "$.issue.fields.creator.self");
+		String creatorName = JsonPath.read(reqBody, "$.issue.fields.creator.displayName");
+		String avatarUrls = JsonPath.read(reqBody, "$.issue.fields.creator.avatarUrls.16x16");
+
+		String issuetype = JsonPath.read(reqBody, "$.issue.fields.issuetype.name");
+		String issuetypeIconUrl = JsonPath.read(reqBody, "$.issue.fields.issuetype.iconUrl");
+
+		String issueUrl = StringUtil.parseUrl(issueSelf) + "/browse/" + issueKey;
+
+		StringBuffer sb = new StringBuffer();
+		sb.append("## JIRA状态报告").append(SysConstant.NEW_LINE);
+		sb.append(StringUtil.replace("> ![{?1}]({?5}) [{?1}]({?2})  创建了 ![]({?6}) {?7}: [{?3}]({?4})", creatorName,
+				creatorSelf, issueKey, issueUrl, avatarUrls, issuetypeIconUrl, issuetype)).append(SysConstant.NEW_LINE);
+		sb.append("**内容:** " + summary).append(SysConstant.NEW_LINE);
+		sb.append("**描述:** " + (description != null ? description : "")).append(SysConstant.NEW_LINE);
+
+		try {
+			String assigneeName = JsonPath.read(reqBody, "$.issue.fields.assignee.displayName");
+			String assigneeSelf = JsonPath.read(reqBody, "$.issue.fields.assignee.self");
+			String assigneeAvatarUrls = JsonPath.read(reqBody, "$.issue.fields.assignee.avatarUrls.16x16");
+
+			sb.append("**分配给:** " + StringUtil.replace("![]({?1}) [{?2}]({?3})", assigneeAvatarUrls, assigneeName, assigneeSelf))
+					.append(SysConstant.NEW_LINE);
+		} catch (Exception e1) {
+		}
+
+		try {
+			String priority = JsonPath.read(reqBody, "$.issue.fields.priority.name");
+			String priorityIconUrl = JsonPath.read(reqBody, "$.issue.fields.priority.iconUrl");
+			sb.append("**优先级:** " + StringUtil.replace("![]({?1}) {?2}", priorityIconUrl, priority))
+					.append(SysConstant.NEW_LINE);
+		} catch (Exception e1) {
+		}
+
+		sb.append("> ").append(SysConstant.NEW_LINE);
+		sb.append(StringUtil.replace("[{?1}]({?2})", "点击查看更多该票相关信息", issueSelf)).append(SysConstant.NEW_LINE);
+
+		RunAsAuth runAsAuth = RunAsAuth.instance().runAs(user);
+
+		ChatChannel chatChannel = new ChatChannel();
+		chatChannel.setChannel(channel2);
+		chatChannel.setContent(sb.toString());
+
+		ChatChannel chatChannel2 = chatChannelRepository.saveAndFlush(chatChannel);
+		// chatChannelRepository.updateAuditing(user2, user2, new Date(), new
+		// Date(), chatChannel2.getId());
+
+		if (mail) {
+			final Mail mail2 = Mail.instance();
+			final User loginUser = getLoginUser();
+			final String href = baseUrl + "/page/index.html#/chat/" + channel + "?id=" + chatChannel2.getId();
+			channel2.getMembers().forEach(item -> mail2.addUsers(item));
+
+			final String html = StringUtil.md2Html(sb.toString());
+
+			ThreadUtil.exec(() -> {
+
+				try {
+					Thread.sleep(3000);
+					mailSender.sendHtml(
+							String.format("TMS-来自第三方应用推送的@消息_%s", DateUtil.format(new Date(), DateUtil.FORMAT7)),
+							TemplateUtil.process("templates/mail/mail-dynamic", MapUtil.objArr2Map("user", loginUser,
+									"date", new Date(), "href", href, "title", "来自第三方应用推送的消息有@到你", "content", html)),
+							mail2.get());
+					logger.info("沟通频道来自第三方应用推送的消息邮件发送成功！");
+				} catch (Exception e) {
+					e.printStackTrace();
+					logger.error("沟通频道来自第三方应用推送的消息邮件发送失败！");
+				}
+
+			});
+		}
+		
+		runAsAuth.rest();
+
+		return RespBody.succeed();
 	}
 }
