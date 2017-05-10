@@ -13,6 +13,7 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -57,7 +58,9 @@ import com.lhjz.portal.entity.Comment;
 import com.lhjz.portal.entity.Log;
 import com.lhjz.portal.entity.Space;
 import com.lhjz.portal.entity.SpaceAuthority;
+import com.lhjz.portal.entity.Tag;
 import com.lhjz.portal.entity.security.User;
+import com.lhjz.portal.model.BlogSearchResult;
 import com.lhjz.portal.model.Mail;
 import com.lhjz.portal.model.PollBlog;
 import com.lhjz.portal.model.RespBody;
@@ -77,6 +80,7 @@ import com.lhjz.portal.repository.ChatDirectRepository;
 import com.lhjz.portal.repository.CommentRepository;
 import com.lhjz.portal.repository.LogRepository;
 import com.lhjz.portal.repository.SpaceRepository;
+import com.lhjz.portal.repository.TagRepository;
 import com.lhjz.portal.repository.UserRepository;
 import com.lhjz.portal.util.DateUtil;
 import com.lhjz.portal.util.MapUtil;
@@ -140,6 +144,9 @@ public class BlogController extends BaseController {
 	
 	@Autowired
 	LogRepository logRepository;
+	
+	@Autowired
+	TagRepository tagRepository;
 
 	@Autowired
 	MailSender2 mailSender;
@@ -149,6 +156,7 @@ public class BlogController extends BaseController {
 	public RespBody create(@RequestParam("url") String url,
 			@RequestParam(value = "spaceId", required = false) Long spaceId,
 			@RequestParam(value = "privated", required = false) Boolean privated,
+			@RequestParam(value = "opened", required = false) Boolean opened,
 			@RequestParam(value = "usernames", required = false) String usernames, @RequestParam("title") String title,
 			@RequestParam("content") String content, @RequestParam("contentHtml") String contentHtml) {
 
@@ -174,6 +182,10 @@ public class BlogController extends BaseController {
 
 		if (privated != null) {
 			blog.setPrivated(privated);
+		}
+		
+		if (opened != null) {
+			blog.setOpened(opened);
 		}
 
 		Blog blog2 = blogRepository.saveAndFlush(blog);
@@ -405,6 +417,8 @@ public class BlogController extends BaseController {
 	@RequestMapping(value = "search", method = RequestMethod.GET)
 	@ResponseBody
 	public RespBody search(@RequestParam("search") String search,
+			@RequestParam(value = "comment", defaultValue = "false") Boolean comment,
+			@RequestParam(value = "ellipsis", defaultValue = "60") Integer ellipsis,
 			@SortDefault(value = "id", direction = Direction.DESC) Sort sort) {
 
 		if (StringUtil.isEmpty(search)) {
@@ -415,13 +429,23 @@ public class BlogController extends BaseController {
 				.findByStatusNotAndTitleContainingOrStatusNotAndContentContaining(Status.Deleted, search,
 						Status.Deleted, search, sort)
 				.stream().filter(b -> hasAuth(b)).peek(b -> {
-					b.setContent(null);
+					b.setContent(StringUtil.limitLength(b.getContent(), ellipsis));
 					b.setBlogAuthorities(null);
 				}).collect(Collectors.toList());
+		
+		if (comment) {
+			List<Comment> comments = commentRepository
+					.findByTypeAndStatusNotAndContentContaining(CommentType.Blog, Status.Deleted, search, sort).stream()
+					.filter(c -> hasAuth(Long.valueOf(c.getTargetId()))).peek(c -> {
+						c.setContent(StringUtil.limitLength(c.getContent(), ellipsis));
+					}).collect(Collectors.toList());
+
+			return RespBody.succeed(new BlogSearchResult(blogs, comments));
+		}
 
 		return RespBody.succeed(blogs);
 	}
-
+	
 	@RequestMapping(value = "openEdit", method = RequestMethod.POST)
 	@ResponseBody
 	public RespBody openEdit(@RequestParam("id") Long id, @RequestParam("open") Boolean open) {
@@ -1024,10 +1048,35 @@ public class BlogController extends BaseController {
 		}
 
 		blog.setPrivated(privated);
+		if(privated) {
+			blog.setOpened(false);
+		}
 		
 		Blog blog2 = blogRepository.saveAndFlush(blog);
 
 		logWithProperties(Action.Update, Target.Blog, id, "privated", privated, blog.getTitle());
+
+		return RespBody.succeed(blog2);
+	}	
+
+	@RequestMapping(value = "opened/update", method = RequestMethod.POST)
+	@ResponseBody
+	public RespBody updateOpened(@RequestParam("id") Long id, @RequestParam("opened") Boolean opened) {
+
+		Blog blog = blogRepository.findOne(id);
+
+		if (!isSuperOrCreator(blog.getCreator().getUsername())) {
+			return RespBody.failed("您没有权限修改该博文的可见性!");
+		}
+
+		blog.setOpened(opened);
+		if(opened) {
+			blog.setPrivated(false);
+		}
+		
+		Blog blog2 = blogRepository.saveAndFlush(blog);
+
+		logWithProperties(Action.Update, Target.Blog, id, "opened", opened, blog.getTitle());
 
 		return RespBody.succeed(blog2);
 	}
@@ -1241,6 +1290,25 @@ public class BlogController extends BaseController {
 
 		return hasAuthWithDeleted(b);
 	}
+	
+	private boolean hasAuth(Long id) {
+		
+		if (id == null) {
+			return false;
+		}
+		
+		Blog b = blogRepository.findOne(id);
+		
+		if (b == null) {
+			return false;
+		}
+		
+		if (b.getStatus().equals(Status.Deleted)) { // 过滤掉删除的
+			return false;
+		}
+		
+		return hasAuthWithDeleted(b);
+	}
 
 	private boolean hasSpaceAuth(Space s) {
 
@@ -1254,6 +1322,10 @@ public class BlogController extends BaseController {
 
 		if (s.getStatus().equals(Status.Deleted)) { // 过滤掉删除的
 			return false;
+		}
+		
+		if(Boolean.TRUE.equals(s.getOpened())) {
+			return true;
 		}
 
 		User loginUser = new User(WebUtil.getUsername());
@@ -1301,6 +1373,10 @@ public class BlogController extends BaseController {
 
 		// 过滤掉没有权限的
 		if (b.getCreator().equals(loginUser)) { // 我创建的
+			return true;
+		}
+		
+		if(Boolean.TRUE.equals(b.getOpened())) {
 			return true;
 		}
 
@@ -1665,6 +1741,8 @@ public class BlogController extends BaseController {
 
 		List<Log> logs = logRepository.findByTargetInAndCreateDateAfter(Arrays.asList(Target.Blog, Target.Comment),
 				new DateTime().minusDays(7).toDate());
+		
+		Collections.reverse(logs);
 
 		logs = logs.stream().filter(lg -> {
 
@@ -1682,6 +1760,78 @@ public class BlogController extends BaseController {
 		}).limit(100).collect(Collectors.toList());
 
 		return RespBody.succeed(logs);
+	}
+	
+	@RequestMapping(value = "tag/add", method = RequestMethod.POST)
+	@ResponseBody
+	public RespBody addTag(@RequestParam("id") Long id, @RequestParam("tags") String tags) {
+
+		Blog blog = blogRepository.findOne(id);
+		Boolean isOpenEdit = blog.getOpenEdit() == null ? false : blog.getOpenEdit();
+		if (!isSuperOrCreator(blog.getCreator().getUsername()) && !isOpenEdit) {
+			return RespBody.failed("您没有权限为该博文添加标签!");
+		}
+
+		User loginUser = getLoginUser();
+
+		if (StringUtil.isNotEmpty(tags)) {
+			Stream.of(tags.split(",")).forEach(t -> {
+				Tag tag = tagRepository.findOneByNameAndCreator(t, loginUser);
+				if (tag == null) {
+					Tag tag2 = new Tag();
+					tag2.setName(t);
+					tag2.getBlogs().add(blog);
+
+					tag = tagRepository.saveAndFlush(tag2);
+				} else {
+					tag.getBlogs().add(blog);
+					tagRepository.saveAndFlush(tag);
+				}
+
+				blog.getTags().add(tag);
+
+			});
+		}
+
+		return RespBody.succeed(blog);
+	}
+	
+	@RequestMapping(value = "tag/remove", method = RequestMethod.POST)
+	@ResponseBody
+	public RespBody removeTag(@RequestParam("id") Long id, @RequestParam("tags") String tags) {
+
+		Blog blog = blogRepository.findOne(id);
+		Boolean isOpenEdit = blog.getOpenEdit() == null ? false : blog.getOpenEdit();
+		if (!isSuperOrCreator(blog.getCreator().getUsername()) && !isOpenEdit) {
+			return RespBody.failed("您没有权限移除该博文的标签!");
+		}
+
+		User loginUser = getLoginUser();
+		
+		if (StringUtil.isNotEmpty(tags)) {
+			Stream.of(tags.split(",")).forEach(t -> {
+				Tag tag = tagRepository.findOneByNameAndCreator(t, loginUser);
+				if (tag != null) {
+					tag.getBlogs().remove(blog);
+
+					tagRepository.saveAndFlush(tag);
+
+					blog.getTags().remove(tag);
+				}
+
+			});
+		}
+
+		return RespBody.succeed(blog);
+	}
+	
+	@RequestMapping(value = "tag/my", method = RequestMethod.GET)
+	@ResponseBody
+	public RespBody myTag() {
+		
+		List<Tag> tags = tagRepository.findByCreator(getLoginUser());
+		
+		return RespBody.succeed(tags);
 	}
 
 }
