@@ -7,7 +7,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no" />
-    <title>TMS-沟通动态</title>
+    <title>思微-沟通动态</title>
     <link rel="icon" th:href="@{/favicon.ico}" href="../../static/favicon.ico" type="image/x-icon" />
     <link rel="shortcut icon" th:href="@{/favicon.ico}" href="../../static/favicon.ico" type="image/x-icon" />
     <link rel="stylesheet" type="text/css" th:href="@{/lib/semantic/semantic.min.css}" href="../../static/lib/semantic/semantic.min.css" />
@@ -904,7 +904,7 @@
                 var txt = $(trigger).siblings('.btn-copy').attr('data-clipboard-text');
                 var href = $(trigger).siblings('.btn-share').attr('data-clipboard-text');
                 var id = $(trigger).closest('.comment').attr('data-id');
-                return 'h1. [TMS沟通消息({title})|{href}]\n----\n'
+                return 'h1. [思微沟通消息({title})|{href}]\n----\n'
                     .replace(/\{title\}/g, '#' + id)
                     .replace(/\{href\}/g, href) + J2M.toJ(txt);
             }
@@ -2432,7 +2432,7 @@
             if (notify.isSupported) {
                 var level = notify.permissionLevel();
                 if (level == notify.PERMISSION_GRANTED) {
-                    notify.createNotification("TMS沟通动态消息通知", {
+                    notify.createNotification("思微沟通动态消息通知", {
                         body: msg,
                         icon: {
                             x16: '/image/tms-x16.ico',
